@@ -1,1 +1,71 @@
+module NetworkInterface (
+    input wire clk,
+    input wire reset,
 
+    // Interface to Processing Element (PE)
+    input wire [31:0] pe_data_in,
+    input wire pe_valid_in,
+    output wire pe_ready_out,
+    output reg [31:0] pe_data_out,
+    output reg pe_valid_out,
+
+    // Interface to Router
+    output reg [31:0] in_data,          // Matches router input
+    output reg in_valid,                // Matches router input
+    input wire in_ready,                // Router ready signal
+    input wire [31:0] out_data,         // Matches router output
+    input wire out_valid,               // Matches router output
+    output wire out_ready               // NI ready for router data
+);
+    
+    // Buffers to hold incoming and outgoing data
+    reg [31:0] buffer_data;
+    reg buffer_valid;
+
+    // State machine for PE to Router data transfer
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            in_data <= 0;
+            in_valid <= 0;
+            buffer_data <= 0;
+            buffer_valid <= 0;
+        end else begin
+            if (pe_valid_in && !buffer_valid) begin
+                buffer_data <= pe_data_in;
+                buffer_valid <= 1;
+            end
+
+            if (buffer_valid && in_ready) begin
+                in_data <= buffer_data;
+                in_valid <= 1;
+                buffer_valid <= 0;
+            end else if (in_ready) begin
+                in_valid <= 0;
+            end
+        end
+    end
+
+    // Ready signal for PE to indicate when NI can accept data
+    assign pe_ready_out = !buffer_valid;
+
+    // State machine for Router to PE data transfer
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            pe_data_out <= 0;
+            pe_valid_out <= 0;
+        end else begin
+            if (out_valid && !pe_valid_out) begin
+                pe_data_out <= out_data;
+                pe_valid_out <= 1;
+            end else if (pe_valid_out) begin
+                if (pe_ready_out) begin
+                    pe_valid_out <= 0;
+                end
+            end
+        end
+    end
+
+    // Ready signal to indicate when NI can accept data from router
+    assign out_ready = !pe_valid_out;
+
+endmodule
